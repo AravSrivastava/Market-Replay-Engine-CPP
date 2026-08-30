@@ -12,6 +12,7 @@
         public:
 
         //Public API's
+        std:: size_t getCount() const {return count_;}
         Tprice getPrice() const {return price_;}
 
         PriceLevel(Tprice price):
@@ -35,18 +36,26 @@
             count_++;
             return;
         }
-        bool removeOrderHead(Order* order){
-            if(head_ == nullptr){
+        bool removeOrderHead() {
+            if (head_ == nullptr) {
                 return false;
             }
-            if(head_ -> next_ != nullptr){
-                Order *temp =  head_;
-                head_ = head_ -> next_;
-                delete temp;
+
+            Order* temp = head_;
+            head_ = head_->next_;
+
+            if (head_ != nullptr) {
+                head_->prev_ = nullptr;
+            } else {
+                tail_ = nullptr;
             }
+
+            temp->next_ = nullptr;
+            temp->prev_ = nullptr;
             count_--;
             return true;
         }
+
         bool removeOrderTail(){
             if(tail_ == nullptr ){
                 return false;
@@ -66,4 +75,22 @@
             return true;
         }
 
+        bool removeOrder(Order *order){
+            if(order-> next_ == nullptr){
+                removeOrderTail();
+                return true;
+            }
+            if(order -> prev_ == nullptr){
+                removeOrderHead();
+                return true;
+            }
+            Order *temp = order;
+            order -> prev_ -> next_ = temp -> next_;
+            order -> next_ -> prev_ = temp -> prev_;
+
+            temp -> prev_ = nullptr;
+            temp -> next_ = nullptr;
+            count_--;
+            return true;
+        }
     };
