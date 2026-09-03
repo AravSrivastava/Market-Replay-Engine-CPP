@@ -28,18 +28,24 @@ class OrderBook{
             return orderLookUp_.contains(id);
         }
 
+        bool askIsEmpty() const{
+                return asks_.empty();
+        }
+
+        bool bidIsEmpty() const {
+            return bids_.empty();
+        }
+
         bool addOrder(std:: unique_ptr<Order> o){
             auto id = o -> getOrderID();
             if(orderLookUp_.contains(id)){
-                std:: print("[Order is already locaed]");
+                std:: print("[ addOrder ] Order is already locaed");
                 return false;
             }
             Side side = o -> getSide();
             auto price = o -> getPrice();
             //Need to add the order in the priceLevel Queue and in the bids / asks and in the orderlookup
-
             // 1. Add in the priceLevel and asks_/bids_
-
             Bids::iterator bidCheck;
             Asks::iterator askCheck;
             if(side == Side::Ask){
@@ -58,20 +64,18 @@ class OrderBook{
                 }
                 bidCheck -> second.addOrder(o.get());
             }
-
             //Adding the OrderId and the unique_ptr in the orderLookUp structure
             orderLookUp_.insert({id, std::move(o)});
-
             return true;
         }
 
-        bool cancelOrder(TorderID id){
+        bool removeOrder(TorderID id){
             //To cancel an order in the orderbook we would need to remove it from the priceLevel queue, then the asks_ or bids_ and after that remove the pointer from the orderLookUp to end its scope.
 
             //Check if the order exists or not
 
             if(!OrderExists(id)){
-                std::print("[The Order you are looking for does not exist]");
+                std::print("[cancelOrder]The Order you are looking for does not exist");
                 return false;
 
             }
@@ -115,8 +119,18 @@ class OrderBook{
             return bids_.begin()-> first ;
         }
 
+        Order* getBidPriceLevel(Tprice price) const {
+            auto it = bids_.find(price);
+            return it->second.returnHead();
+        }
+        Order* getAskPriceLevel(Tprice price) const {
+            auto it = asks_.find(price);
+            return it -> second.returnHead();
+        }
+
 };
 
 
 //Unordered map will store the orderId as its key
-//
+//Need to add getBidPriveLevel(Tprice price) -> Helper function to get the priceLevel head.
+//Need to add getAskPriveLevel(Tprice price) -> Helper function to get the priveLevel head.

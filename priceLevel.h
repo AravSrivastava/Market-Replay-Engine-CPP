@@ -93,4 +93,16 @@
             count_--;
             return true;
         }
+
+        Order* returnHead() const {
+            return head_;
+        }
+
+        /*
+         * Dividing the all the levels of the match function into different layers that will help us make it simple
+         * L1 :ORDER VALIDATION -> Does the order have valid price and quantity?
+         *                      -> Does the orderId already exist?
+         *                      -> Is the side valid?
+         */
+
     };
