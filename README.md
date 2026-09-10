@@ -1,90 +1,90 @@
-
 # Market Replay Engine
 
-A C++ project focused on building the core infrastructure behind an event-driven market replay and trading simulation system.
+A performance-oriented C++ project for building the core infrastructure of an event-driven market replay and trading simulation system.
 
-The project is currently centered around implementing a **price-time priority limit order book and matching engine**, with the long-term goal of building a complete market replay engine capable of processing historical market events through an order book and matching engine.
+The project is being built from the ground up to explore **market microstructure, matching engines, order books, memory ownership, data structures, and performance-oriented systems programming**.
 
-> **Current Status:** 🚧 Under active development
+> **Current Status:** 🚧 v1 Matching Engine Complete — Market Replay Infrastructure In Progress
 
 ---
 
-# Overview
+## Overview
 
-Modern trading systems rely on efficient order books to maintain market state and process incoming orders. This project is an implementation-focused exploration of those underlying systems using modern C++.
+The current implementation provides a **price-time priority limit order book** and matching engine capable of processing incoming orders, matching them against resting liquidity, executing partial and full fills, and maintaining the state of the book.
 
-The current implementation provides:
+The long-term goal is to evolve this into a complete market replay engine capable of processing historical market events through the order book and matching engine.
 
+### Current capabilities
+
+- Price-time priority matching
 - Separate bid and ask books
-- Price-time priority
 - FIFO ordering within each price level
+- Best bid / best ask queries
 - Order lookup by order ID
 - Order cancellation
-- Best bid and best ask queries
-- Explicit ownership management using `std::unique_ptr`
-- Incoming order processing
-- Price compatibility checks
 - Partial order execution
 - Full order execution
-- Multi-level matching through a matching loop
-- Removal of fully executed resting orders
-- Resting of unfilled incoming orders
+- Multi-level order matching
+- Resting unfilled orders
+- Explicit ownership through `std::unique_ptr`
+- Non-owning order pointers within price levels
+- C++23 build configuration
+- CMake + Ninja build system
+- Debug, Release, and RelWithDebInfo build presets
+- Dedicated performance benchmark
 
 ---
 
-# Architecture
+## Architecture
 
-The current architecture consists of four primary components:
+The current engine is composed of four primary components:
 
 ```text
-                 ┌──────────────────┐
-                 │      Order       │
-                 │──────────────────│
-                 │ Order ID         │
-                 │ Price            │
-                 │ Quantity         │
-                 │ Side             │
-                 │ Status           │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │   PriceLevel     │
-                 │──────────────────│
-                 │ Price            │
-                 │ FIFO Order Queue │
-                 │ Head / Tail      │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │    OrderBook     │
-                 │──────────────────│
-                 │ Bid Levels       │
-                 │ Ask Levels       │
-                 │ Order Lookup     │
-                 └────────┬─────────┘
-                          │
-                          ▼
-                 ┌──────────────────┐
-                 │ MatchingEngine   │
-                 │──────────────────│
-                 │ Price Crossing   │
-                 │ Order Execution  │
-                 │ Partial Fills    │
-                 │ Full Fills       │
-                 └──────────────────┘
+                    ┌─────────────────────┐
+                    │       Order         │
+                    │─────────────────────│
+                    │ Order ID            │
+                    │ Price               │
+                    │ Quantity            │
+                    │ Remaining Quantity  │
+                    │ Side                │
+                    │ Status              │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     PriceLevel      │
+                    │─────────────────────│
+                    │ Price               │
+                    │ FIFO Order Queue    │
+                    │ Head / Tail         │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │     OrderBook       │
+                    │─────────────────────│
+                    │ Bid Price Levels    │
+                    │ Ask Price Levels    │
+                    │ Order Lookup        │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │   MatchingEngine    │
+                    │─────────────────────│
+                    │ Price Compatibility │
+                    │ Order Matching      │
+                    │ Trade Execution     │
+                    │ Partial / Full Fill │
+                    └─────────────────────┘
 ```
 
----
+### Order
 
-# Core Components
+`Order` represents an individual order entering or resting in the book.
 
-## Order
-
-The `Order` class represents an individual order in the market.
-
-Each order contains:
+An order contains:
 
 - Order ID
 - Price
@@ -94,7 +94,7 @@ Each order contains:
 - Status
 - Links to neighboring orders within a price level
 
-### Type Definitions
+Prices and quantities use integer-based types to avoid floating-point precision issues.
 
 ```cpp
 using Tprice = std::int64_t;
@@ -102,196 +102,93 @@ using TorderID = std::uint64_t;
 using Tquantity = std::uint64_t;
 ```
 
-Using integer-based price types avoids floating-point precision issues when representing prices.
-
-### Order Side
-
-```cpp
-enum class Side {
-    Ask,
-    Bid
-};
-```
-
-### Order Status
-
-```cpp
-enum class Status {
-    Inactive,
-    Active,
-    Filled
-};
-```
-
 ---
 
-# PriceLevel
+### PriceLevel
 
-A `PriceLevel` represents all orders resting at the same price.
+A `PriceLevel` manages all orders resting at the same price.
 
 Orders at the same price are maintained using a manually implemented doubly linked list:
 
 ```text
 HEAD
-  │
-  ▼
+ │
+ ▼
 [Order] ⇄ [Order] ⇄ [Order]
-                        │
-                        ▼
-                       TAIL
+                         │
+                         ▼
+                        TAIL
 ```
 
-This structure preserves **FIFO ordering**, which is required for price-time priority.
+This preserves FIFO ordering within a price level.
 
-### Supported Operations
+Supported operations include:
 
-- Add an order to the tail
+- Add order to the tail
 - Remove the head order
 - Remove the tail order
 - Remove an arbitrary order
-- Track the number of orders at the price level
-
-The linked-list structure allows orders to maintain their position within a price level without storing the queue separately.
+- Track the number of orders at the level
 
 ---
 
-# OrderBook
+### OrderBook
 
-The `OrderBook` manages:
+The `OrderBook` maintains three primary structures:
 
-1. Bid-side price levels
-2. Ask-side price levels
-3. Order ownership
-4. Order lookup
-
----
-
-## Bid Book
+```text
+OrderBook
+│
+├── bids_
+│      └── price → PriceLevel
+│
+├── asks_
+│      └── price → PriceLevel
+│
+└── orderLookUp_
+       └── order ID → unique_ptr<Order>
+```
 
 Bids are stored in descending price order:
 
-```text
-Highest Bid
-    │
-    ▼
-[105] → [104] → [103]
-```
-
 ```cpp
 using Bids =
-    std::map<
-        Tprice,
-        PriceLevel,
-        std::greater<Tprice>
-    >;
+    std::map<Tprice, PriceLevel, std::greater<Tprice>>;
 ```
-
-This allows the best bid to be accessed directly through:
-
-```cpp
-bids_.begin()
-```
-
----
-
-## Ask Book
 
 Asks are stored in ascending price order:
-
-```text
-Lowest Ask
-    │
-    ▼
-[106] → [107] → [108]
-```
 
 ```cpp
 using Asks =
     std::map<Tprice, PriceLevel>;
 ```
 
-The best ask is therefore available through:
-
-```cpp
-asks_.begin()
-```
-
----
-
-# Order Ownership
+This allows the best bid and best ask to be obtained from the beginning of their respective maps.
 
 Orders are owned by the order lookup structure:
 
 ```cpp
 using OrderLookUp =
-    std::unordered_map<
-        TorderID,
-        std::unique_ptr<Order>
-    >;
+    std::unordered_map<TorderID, std::unique_ptr<Order>>;
 ```
+
+Price levels maintain non-owning `Order*` pointers.
 
 This separates:
 
-- **Ownership** of orders
-- **Price-level ordering**
-- **Order lookup**
+- Order ownership
+- Price-level ordering
+- Order lookup
 
-The order lookup owns each `Order` using `std::unique_ptr`.
-
-Price levels only store non-owning raw pointers:
-
-```text
-OrderBook
-│
-├── orderLookUp_
-│      │
-│      └── unique_ptr<Order>
-│
-├── bids_
-│      │
-│      └── PriceLevel
-│              │
-│              └── Order*
-│
-└── asks_
-       │
-       └── PriceLevel
-               │
-               └── Order*
-```
-
-This ensures that there is a single clear owner for every resting order while price levels can efficiently maintain FIFO ordering.
+while maintaining a single owner for each resting order.
 
 ---
 
-# Matching Engine
+## Matching Engine
 
-The `MatchingEngine` is responsible for processing incoming orders against the existing order book.
+`MatchingEngine` processes incoming orders against the existing order book.
 
-The engine does not own the `OrderBook`. Instead, it operates on an existing order book:
-
-```cpp
-void match(
-    std::unique_ptr<Order> mainOrder,
-    OrderBook& orderbook
-);
-```
-
-The incoming order is initially owned by the caller through a `std::unique_ptr`.
-
-During matching, the engine accesses the order through a non-owning raw pointer:
-
-```cpp
-Order* order = mainOrder.get();
-```
-
-Ownership remains with `mainOrder` until the order is moved into the `OrderBook`.
-
----
-
-## Matching Process
-
-Conceptually, the matching process follows this flow:
+The matching process is conceptually:
 
 ```text
 Incoming Order
@@ -306,244 +203,62 @@ Check Opposite Side
 Find Best Compatible Price
       │
       ▼
-Find Compatible Order
+Find Compatible Resting Order
       │
       ▼
 Execute Trade
       │
       ├───────────────┐
       ▼               ▼
-Order Filled?     Resting Order Filled?
+Incoming Filled?   Resting Filled?
       │               │
       ▼               ▼
-Stop Matching    Remove Resting Order
+   Stop         Remove Resting Order
                       │
                       ▼
-                 Continue Matching
+                Continue Matching
 ```
 
----
+### Price compatibility
 
-# Price Compatibility
-
-The matching engine checks whether an incoming order can execute against the best available price on the opposite side of the book.
-
-### Incoming Ask
-
-An ask can execute when:
+For an incoming ask:
 
 ```text
-Incoming Ask Price ≤ Best Bid
+Incoming Ask Price <= Best Bid
 ```
 
-For example:
+For an incoming bid:
 
 ```text
-Incoming Ask: 100
-
-Best Bid: 101
-
-100 ≤ 101
-
-MATCH
+Incoming Bid Price >= Best Ask
 ```
 
-If:
+### Execution quantity
+
+Each execution uses:
 
 ```text
-Incoming Ask: 103
-
-Best Bid: 101
-
-103 > 101
-
-NO MATCH
-```
-
----
-
-### Incoming Bid
-
-A bid can execute when:
-
-```text
-Incoming Bid Price ≥ Best Ask
-```
-
-For example:
-
-```text
-Incoming Bid: 105
-
-Best Ask: 103
-
-105 ≥ 103
-
-MATCH
-```
-
----
-
-# Execution Quantity
-
-The execution quantity is determined using the remaining quantities of both orders.
-
-Conceptually:
-
-```text
-Execution Quantity =
 min(
-    Incoming Remaining Quantity,
-    Resting Remaining Quantity
+    incoming remaining quantity,
+    resting remaining quantity
 )
 ```
 
-For example:
+This supports:
 
-```text
-Incoming Order: 100 shares
-Resting Order:   40 shares
+- Partial fills
+- Full fills
+- Multiple executions against different price levels
 
-Execution:
-
-40 shares
-```
-
-The resting order becomes filled while the incoming order retains:
-
-```text
-60 shares
-```
-
-The matching engine can then continue matching the remaining quantity against the next available compatible order.
+If the incoming order still has quantity after matching, the remaining quantity is added to the order book.
 
 ---
 
-# Partial and Full Fills
+## Price-Time Priority
 
-The current implementation handles the primary execution scenarios.
+The order book follows standard price-time priority.
 
-## Incoming Order Filled
-
-```text
-Incoming Order: Filled
-Resting Order:  Active
-```
-
-Matching stops because the incoming order has no remaining quantity.
-
----
-
-## Resting Order Filled
-
-```text
-Incoming Order: Active
-Resting Order:  Filled
-```
-
-The filled resting order is removed from the order book.
-
-Matching can then continue using the incoming order's remaining quantity.
-
----
-
-## Both Orders Filled
-
-```text
-Incoming Order: Filled
-Resting Order:  Filled
-```
-
-The resting order is removed from the order book and execution stops.
-
----
-
-# Matching Loop
-
-The matching engine uses a loop to continue execution while the incoming order still has remaining quantity:
-
-```text
-Incoming Order
-      │
-      ▼
-Find Best Compatible Order
-      │
-      ▼
-Execute
-      │
-      ├── Incoming Order Filled ──────► Stop
-      │
-      ├── No Compatible Order ────────► Stop
-      │
-      └── Resting Order Filled ───────► Continue
-```
-
-This allows a single incoming order to consume liquidity across multiple resting orders.
-
-For example:
-
-```text
-Incoming Buy Order
-Quantity: 100
-
-Ask Book:
-
-Price  Quantity
-----------------
-100      30
-101      40
-102      50
-```
-
-The matching engine can execute:
-
-```text
-100 @ 100
- 30 @ 101
-```
-
-and then continue until the incoming order is fully executed or no compatible liquidity remains.
-
----
-
-# Resting Unfilled Orders
-
-If an incoming order cannot be completely executed, the remaining quantity can be placed into the order book.
-
-Conceptually:
-
-```text
-Incoming Order
-      │
-      ▼
-Matching Loop
-      │
-      ├── Fully Filled
-      │        │
-      │        ▼
-      │      Done
-      │
-      └── Remaining Quantity
-               │
-               ▼
-        Add to OrderBook
-```
-
-Ownership is transferred into the order book:
-
-```cpp
-orderbook.addOrder(std::move(mainOrder));
-```
-
-After this operation, the `OrderBook` becomes responsible for the lifetime of the resting order.
-
----
-
-# Price-Time Priority
-
-The order book follows the basic principle of price-time priority.
-
-## Price Priority
+### Price priority
 
 For bids:
 
@@ -557,11 +272,9 @@ For asks:
 Lower Price → Higher Priority
 ```
 
----
+### Time priority
 
-## Time Priority
-
-Orders at the same price are processed in FIFO order:
+Orders at the same price are processed FIFO:
 
 ```text
 First Order In
@@ -570,6 +283,7 @@ Highest Priority
 
 Second Order
       ↓
+Lower Priority
 
 Third Order
       ↓
@@ -580,58 +294,177 @@ The `PriceLevel` linked list maintains this ordering.
 
 ---
 
-# Supported Operations
+## Project Structure
 
-## Order Book
-
-- Add order
-- Remove order
-- Cancel order
-- Lookup order by ID
-- Retrieve best bid
-- Retrieve best ask
-- Maintain bid-side price levels
-- Maintain ask-side price levels
-- Preserve FIFO ordering
-
----
-
-## Matching Engine
-
-- Validate incoming orders
-- Check whether an order already exists
-- Check incoming order quantity
-- Detect available liquidity on the opposite side
-- Determine price compatibility
-- Retrieve compatible resting orders
-- Calculate execution quantity
-- Execute partial fills
-- Execute full fills
-- Remove filled resting orders
-- Continue matching while execution remains possible
-- Rest remaining incoming quantity in the order book
-
----
-
-# Current Project Structure
+The repository is organized around the separation between core engine code, correctness tests, and performance benchmarks.
 
 ```text
-Market-Replay-Engine-C-
+Market-Replay-Engine-CPP/
 │
-├── Order.h
-│   └── Order representation and core types
+├── include/
+│   ├── MatchingEngine.h
+│   ├── Order.h
+│   ├── orderbook.h
+│   └── priceLevel.h
 │
-├── priceLevel.h
-│   └── FIFO queue management for individual prices
+├── tests/
+│   └── test.cpp
 │
-├── orderbook.h
-│   └── Bid/ask books and order ownership
+├── benchmarks/
+│   └── testing.cpp
 │
-├── matchingEngine.h
-│   └── Order matching and execution logic
-│
-└── README.md
+├── CMakeLists.txt
+├── CMakePresets.json
+├── README.md
+├── .gitignore
+└── .vscode/
 ```
+
+### Directory responsibilities
+
+| Directory | Purpose |
+|---|---|
+| `include/` | Core order book and matching-engine implementation |
+| `tests/` | Functional/correctness tests |
+| `benchmarks/` | Performance workloads |
+| `.vscode/` | VS Code project configuration |
+
+---
+
+# Building
+
+The project uses:
+
+- **C++23**
+- **CMake**
+- **Ninja**
+- **Clang**
+
+CMake Presets provide separate build configurations for development, optimized execution, and profiling.
+
+### Configure and build Debug
+
+```bash
+cmake --preset debug
+cmake --build --preset debug
+```
+
+The resulting executables are located under:
+
+```text
+build/debug/
+```
+
+### Configure and build Release
+
+```bash
+cmake --preset release
+cmake --build --preset release
+```
+
+Release builds are intended for performance measurements.
+
+### Configure and build RelWithDebInfo
+
+```bash
+cmake --preset relwithdebinfo
+cmake --build --preset relwithdebinfo
+```
+
+This configuration is intended for profiling optimized code while retaining debugging information.
+
+---
+
+# Running
+
+## Functional test
+
+After building the Debug configuration:
+
+```bash
+./build/debug/market_replay_test
+```
+
+The functional test exercises the order book and matching engine with a small set of orders.
+
+## Performance benchmark
+
+Build the Release configuration:
+
+```bash
+cmake --preset release
+cmake --build --preset release
+```
+
+Then run:
+
+```bash
+./build/release/market_replay_benchmark
+```
+
+The benchmark currently processes a large synthetic workload through the matching engine and reports:
+
+- Total execution time
+- Orders per second
+- Total trades executed
+- Best bid
+- Best ask
+
+The benchmark is intended to provide a repeatable baseline for future performance work.
+
+---
+
+# Performance
+
+The current benchmark processes:
+
+```text
+20,000,000 orders
+```
+
+A recent benchmark run achieved approximately:
+
+```text
+~998,000 orders/second
+```
+
+The benchmark is not intended to represent production exchange performance. Its purpose is to establish a repeatable baseline for evaluating future changes to:
+
+- Data structures
+- Memory allocation
+- Matching logic
+- Order lookup
+- Logging
+- Cache behavior
+- Compiler optimizations
+- Other performance-sensitive components
+
+Future performance measurements will be compared against this baseline.
+
+---
+
+# Design Goals
+
+This project is primarily a **systems programming and market microstructure learning project**.
+
+The implementation focuses on understanding the underlying mechanisms rather than relying on an existing trading framework.
+
+Key areas of interest include:
+
+- Modern C++
+- C++23
+- Data structure design
+- Price-time priority
+- Order lifecycle management
+- Matching algorithms
+- Memory ownership
+- Smart pointers
+- Non-owning pointers
+- STL associative containers
+- FIFO data structures
+- Market microstructure
+- Performance-oriented design
+- Profiling and optimization
 
 ---
 
@@ -648,9 +481,7 @@ Market-Replay-Engine-C-
 - [x] Best bid query
 - [x] Best ask query
 
----
-
-## Phase 2 — Matching Engine
+## Phase 2 — Matching Engine v1
 
 - [x] Matching engine architecture
 - [x] Marketable order detection
@@ -661,127 +492,87 @@ Market-Replay-Engine-C-
 - [x] Removal of completed resting orders
 - [x] Multi-order matching loop
 - [x] Resting unfilled incoming orders
-- [ ] Trade generation
-- [ ] Execution reporting
-- [ ] Comprehensive testing
-
----
+- [x] Basic execution handling
+- [x] Initial performance benchmark
 
 ## Phase 3 — Market Replay
 
 - [ ] Market event representation
-- [ ] Historical data ingestion
+- [ ] Historical market-data ingestion
 - [ ] Event sequencing
 - [ ] Replay loop
 - [ ] Timestamp handling
+- [ ] Market-data adapters
 
----
+## Phase 4 — Testing & Performance
 
-## Phase 4 — System Improvements
-
-- [ ] Unit testing
-- [ ] Performance benchmarking
-- [ ] Memory optimizations
+- [ ] Comprehensive unit tests
+- [ ] Edge-case testing
+- [ ] Sanitizer builds
 - [ ] Profiling
+- [ ] Memory optimization
+- [ ] Allocation analysis
+- [ ] Cache behavior analysis
+- [ ] Benchmark suite
+- [ ] Logging performance analysis
+
+## Phase 5 — Systems Extensions
+
 - [ ] Concurrency exploration
-- [ ] Atomic operations
-- [ ] Market data adapters
+- [ ] Atomic operations where appropriate
+- [ ] Additional market-data infrastructure
+- [ ] Replay performance improvements
 
 ---
 
-# Design Goals
+# Development Philosophy
 
-The project focuses on understanding and implementing the underlying systems concepts behind trading infrastructure.
+The engine is intentionally being developed incrementally.
 
-Key areas of interest include:
+The objective is not simply to produce a fast matching engine, but to understand the engineering decisions behind one:
 
-- Modern C++
-- Memory ownership
-- Smart pointers
-- Data structure design
-- Price-time priority
-- Order lifecycle management
-- Matching algorithms
-- Market microstructure
-- Performance-oriented system design
+```text
+Data Structures
+      ↓
+Memory Ownership
+      ↓
+Order Book
+      ↓
+Matching Engine
+      ↓
+Testing
+      ↓
+Benchmarking
+      ↓
+Profiling
+      ↓
+Optimization
+      ↓
+Market Replay
+```
+
+Performance improvements will be measured against reproducible benchmarks rather than assumed from code changes.
 
 ---
 
 # Current Focus
 
-The core order book and the initial matching engine are now implemented.
+The first version of the core matching engine is complete.
 
-The next stage of development is focused on:
+The immediate development focus is now shifting toward:
 
-1. **Testing the matching engine**
-2. Verifying full and partial fill scenarios
-3. Testing multi-order execution
-4. Implementing trade generation
-5. Improving error handling and edge-case coverage
-6. Benchmarking the order book and matching engine
+1. Expanding correctness testing
+2. Improving edge-case coverage
+3. Building a stronger benchmark suite
+4. Profiling the current implementation
+5. Investigating memory and allocation behavior
+6. Improving the logging path
+7. Beginning the market replay layer
 
----
-
-# Example System Flow
-
-```text
-Historical Market Events
-          │
-          ▼
-┌───────────────────────┐
-│    Market Replay      │
-│                       │
-│  Event Sequencing     │
-│  Timestamp Handling   │
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│    Matching Engine    │
-│                       │
-│  Price Compatibility  │
-│  Order Execution      │
-│  Partial Fills        │
-└───────────┬───────────┘
-            │
-            ▼
-┌───────────────────────┐
-│      Order Book       │
-│                       │
-│  Bids                 │
-│  Asks                 │
-│  Price Levels         │
-└───────────────────────┘
-            │
-            ▼
-        Trade Events
-```
-
----
-
-# Why This Project?
-
-This project is being built primarily as a systems programming and market microstructure learning project.
-
-Rather than relying entirely on existing trading frameworks, the goal is to understand how the underlying components work by implementing them from the ground up.
-
-The project currently demonstrates concepts involving:
-
-- Manual linked-list implementation
-- STL associative containers
-- Smart pointer ownership
-- Raw non-owning pointers
-- FIFO data structures
-- Price-time priority
-- Order matching
-- Partial execution
-- Full execution
-- Order lifecycle management
-
-The project will gradually evolve from a basic order book and matching engine into a broader market replay system.
+The project will gradually evolve from a standalone order book and matching engine into a broader historical market replay system.
 
 ---
 
 ## License
 
-This project is currently under development. A license will be added as the project matures.
+This project is currently under development and does not yet have a finalized open-source license.
