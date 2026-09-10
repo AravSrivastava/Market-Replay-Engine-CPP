@@ -1,0 +1,8 @@
+# CMake build
+/build
+
+#MacOS
+/DS_Store
+
+#Local Cache
+.Cache

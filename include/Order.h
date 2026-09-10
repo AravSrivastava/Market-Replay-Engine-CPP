@@ -21,14 +21,14 @@
         friend class PriceLevel;
             //Constructor for order class
             Order(Tprice price, TorderID orderID, Tquantity quantity, Side side):
-            price_{price},
-            orderID_{orderID},
-            initialQuantity_{quantity},
-            remainingQuantity_{quantity},
-            side_{side},
-            status_{Status::Active},
-            prev_{nullptr},
-            next_{nullptr}
+                price_{price},
+                orderID_{orderID},
+                initialQuantity_{quantity},
+                side_{side},
+                remainingQuantity_{quantity},
+                status_{Status::Active},
+                prev_{nullptr},
+                next_{nullptr}
             {}
             //Public API's to call.
             Tprice getPrice() const {return price_;}

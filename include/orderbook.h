@@ -66,6 +66,7 @@ class OrderBook{
             }
             //Adding the OrderId and the unique_ptr in the orderLookUp structure
             orderLookUp_.insert({id, std::move(o)});
+            //std::println("[orderbook : addOrder] Order added successfully");
             return true;
         }
 
@@ -74,8 +75,8 @@ class OrderBook{
 
             //Check if the order exists or not
 
-            if(!OrderExists(id)){
-                std::print("[cancelOrder]The Order you are looking for does not exist");
+            if(not OrderExists(id)){
+                std::print("[orderbook: removeOrder]The Order you are looking for does not exist");
                 return false;
 
             }
@@ -104,7 +105,7 @@ class OrderBook{
 
             //To remove the order from the orderLookUp map that contains the ownership of the order ptr
             orderLookUp_.erase(id);
-
+            //std::println("[orderbook: removeOrder] Order removed succesfully");
             return true;
         }
 
