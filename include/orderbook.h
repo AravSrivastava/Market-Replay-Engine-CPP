@@ -104,6 +104,8 @@ class OrderBook{
             }
 
             //To remove the order from the orderLookUp map that contains the ownership of the order ptr
+            
+            orderLookUp_[id]->cancelOrder();
             orderLookUp_.erase(id);
             //std::println("[orderbook: removeOrder] Order removed succesfully");
             return true;

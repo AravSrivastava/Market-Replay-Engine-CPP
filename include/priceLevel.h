@@ -21,6 +21,7 @@
             {}
 
         void addOrder(Order* order) {
+            if(not order) return ;
             if(head_ == nullptr){
                 order->prev_ = nullptr;
                 order -> next_ = nullptr;
@@ -36,6 +37,7 @@
             count_++;
             return;
         }
+
         bool removeOrderHead() {
             if (head_ == nullptr) {
                 return false;
@@ -76,6 +78,7 @@
         }
 
         bool removeOrder(Order *order){
+            if(not order) return false;
             if(order-> next_ == nullptr){
                 removeOrderTail();
                 return true;

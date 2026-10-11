@@ -1,12 +1,12 @@
 #pragma once
 #include "Order.h"
-#include "priceLevel.h"
 #include "orderbook.h"
 #include <cassert>
 #include <cstdint>
 #include <optional>
-#include <print>
-#include <type_traits>
+//#include "priceLevel.h"
+//#include <print>
+//#include <type_traits>
 
 enum class Executable{
     MayContinue,
@@ -26,18 +26,9 @@ enum class Executable{
                 return (order ->getRemainingQuantity() > 0);
             }
             bool checkIncomingMatch(Order* order, const OrderBook& orderbook){
-                Side side = order -> getSide();
-                if(side ==  Side::Ask){
-                    if(orderbook.bidIsEmpty()){
-                        return false;
-                    }
-                }else{
-                    if(orderbook.askIsEmpty()){
-                        return false;
-                    }
-                }
-                return true;
+                return priceCompatibility(order, orderbook).has_value();
             }
+
             std::optional<Tprice> priceCompatibility(Order* order, const OrderBook& orderbook){
                 auto bestPrice = order -> getPrice();
                 if(order -> getSide() ==  Side::Ask){
@@ -88,49 +79,35 @@ enum class Executable{
                 }
             }
             //The match function
-            Executable execute(Order* order, OrderBook& orderbook){
-                if(order == nullptr){
-                    return Executable::StopExecution;
-                }
-                auto bestPrice = priceCompatibility(order,orderbook);
-                Order* compatibleOrder = getCompatibleOrder(bestPrice, order,  orderbook);
-                if (compatibleOrder == nullptr){
-                    return Executable::StopExecution;
-                }
-                Tquantity executionQuantity = getExecutionQuantity(order, compatibleOrder);
-                if(executionQuantity <= 0){
-                    return Executable::StopExecution;
-                }
-                //Execution Process
-                order -> updateQuantity(executionQuantity);
-                if(order -> getRemainingQuantity() == 0){
-                    order -> orderFilled();
-                }
-                compatibleOrder -> updateQuantity(executionQuantity);
-                totalTrades_++;
-                if(compatibleOrder -> getRemainingQuantity() == 0){
-                    compatibleOrder -> orderFilled();
-                }
+            Executable execute(Order* incoming, OrderBook& book) {
+    auto bestPrice = priceCompatibility(incoming, book);
+    if (!bestPrice) return Executable::StopExecution;
 
-                if(order -> getStatus() == Status::Filled && compatibleOrder ->getStatus() == Status ::Active){
-                    return Executable::StopExecution;
-                }
-                else if(compatibleOrder -> getStatus() == Status::Filled && order -> getStatus() == Status::Active){
-                    orderbook.removeOrder(compatibleOrder -> getOrderID());
-                    return Executable::MayContinue;
-                }
-                else if(order->getStatus() == Status::Filled && compatibleOrder->getStatus() == Status::Filled) {
-                    if(orderbook.OrderExists(order -> getOrderID())){
-                        orderbook.removeOrder(order -> getOrderID());
-                    }
-                    orderbook.removeOrder(compatibleOrder-> getOrderID());
+    Order* resting = getCompatibleOrder(bestPrice, incoming, book);
+    if (!resting) return Executable::StopExecution;
 
-                    return Executable:: StopExecution;
-                }
-                else{
-                    return Executable::StopExecution;
-                }
-            }
+    Tquantity execQty = getExecutionQuantity(incoming, resting);
+    if (execQty == 0) return Executable::StopExecution;
+
+    incoming->updateQuantity(execQty);
+    resting->updateQuantity(execQty);
+    totalTrades_++;
+
+    bool incomingFilled = (incoming->getRemainingQuantity() == 0);
+    bool restingFilled = (resting->getRemainingQuantity() == 0);
+
+    if (incomingFilled) incoming->orderFilled();
+    if (restingFilled) resting->orderFilled();
+
+    if (restingFilled) {
+        book.removeOrder(resting->getOrderID());
+    }
+
+    if (incomingFilled) {
+        return Executable::StopExecution;  // Incoming done, don't re-add
+    }
+    return Executable::MayContinue;  // Incoming has more qty, continue matching
+}
 
 
 
@@ -138,13 +115,14 @@ enum class Executable{
             uint64_t get_totalTrades() const { return totalTrades_; }
 
             void match(std::unique_ptr<Order> mainOrder, OrderBook& orderbook){
+                if(not mainOrder) return;
                 Order* order = mainOrder.get();
                 if(order == nullptr){
                     return;
                 }
                 //This checks if the order exists in the orderbook or not
+                //std::print("[MatchingEngine: match] The order already exists");
                 if(orderExists(order,orderbook)){
-                    //std::print("[MatchingEngine: match] The order already exists");
                     return;
                 }
                 if(not quantityCheck(order)){

@@ -1,7 +1,8 @@
     #pragma once
+    #include <cassert>
     #include <iostream>
     #include <cstdint>
-    #include <iterator>
+
     enum class Side{
         Ask,
         Bid
@@ -48,6 +49,7 @@
             //Methods for Order class
             void cancelOrder() { status_ = Status::Cancelled ;}
             void updateQuantity(Tquantity executionQuantity){
+                assert(executionQuantity <= remainingQuantity_);
                 remainingQuantity_ -= executionQuantity;
             }
             void orderActive(){
